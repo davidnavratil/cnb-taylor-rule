@@ -24,7 +24,6 @@ from typing import TypedDict
 
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 
 log = logging.getLogger(__name__)
 
@@ -120,23 +119,32 @@ def calibrate_ols(df: pd.DataFrame) -> TaylorParams:
         log.warning("OLS: nedostatek dat, vracím výchozí parametry")
         return TaylorParams(rho=0.80, rstar=1.5, alpha=1.5, beta=0.5)
 
-    X = sm.add_constant(data[["lagged_rate", "cpi", "gdp"]])
-    y = data["actual_rate"]
+    # Design matrix: [1, i_{t-1}, π_t, g_t]
+    X_arr = np.column_stack([
+        np.ones(len(data)),
+        data["lagged_rate"].values,
+        data["cpi"].values,
+        data["gdp"].values,
+    ])
+    y_arr = data["actual_rate"].values
 
     try:
-        model = sm.OLS(y, X).fit()
+        coeffs, _, _, _ = np.linalg.lstsq(X_arr, y_arr, rcond=None)
     except Exception as e:
         log.error(f"OLS selhala: {e}")
         return TaylorParams(rho=0.80, rstar=1.5, alpha=1.5, beta=0.5)
 
-    c_hat = float(model.params.get("const", 0.0))
-    rho_hat = float(model.params.get("lagged_rate", 0.8))
-    a_hat = float(model.params.get("cpi", 0.3))
-    b_hat = float(model.params.get("gdp", 0.1))
+    c_hat, rho_hat, a_hat, b_hat = (float(v) for v in coeffs)
+
+    # R² pro informaci v logu
+    y_pred = X_arr @ coeffs
+    ss_res = float(np.sum((y_arr - y_pred) ** 2))
+    ss_tot = float(np.sum((y_arr - y_arr.mean()) ** 2))
+    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
 
     log.info(
         f"OLS výsledky: const={c_hat:.3f}, rho={rho_hat:.3f}, "
-        f"cpi={a_hat:.3f}, gdp={b_hat:.3f}, R²={model.rsquared:.3f}"
+        f"cpi={a_hat:.3f}, gdp={b_hat:.3f}, R²={r2:.3f}"
     )
 
     # Ořez rho na validní rozsah

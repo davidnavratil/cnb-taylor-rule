@@ -22,10 +22,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
-      - name: Instalace závislostí
-        run: pip install -r requirements.txt
+      - name: Instalace závislostí (čistá, bez cache)
+        run: pip install --no-cache-dir -r requirements.txt
 
       - name: Generování dat (data.json + params.json)
         run: python scripts/generate_data.py

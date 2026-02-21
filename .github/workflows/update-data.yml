@@ -1,0 +1,39 @@
+name: Aktualizace dat a nasazení
+
+on:
+  schedule:
+    - cron: '0 7 * * *'   # denně v 7:00 UTC
+  workflow_dispatch:       # ruční spuštění přes Actions tab
+  push:
+    branches: [main]       # při každém push na main
+
+permissions:
+  contents: write          # nutné pro peaceiris/actions-gh-pages
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalace závislostí
+        run: pip install -r requirements.txt
+
+      - name: Generování dat (data.json + params.json)
+        run: python scripts/generate_data.py
+
+      - name: Nasazení na GitHub Pages (gh-pages větev)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend
+          force_orphan: true
+          commit_message: "data: aktualizace ${{ github.run_id }}"

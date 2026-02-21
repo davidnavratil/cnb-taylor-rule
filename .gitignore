@@ -1,0 +1,23 @@
+# Cache dat (generuje se lokálně, v CI se přeskakuje)
+.cache/
+
+# Vygenerovaná data pro GitHub Pages (generuje GitHub Actions)
+frontend/data.json
+frontend/params.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp

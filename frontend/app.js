@@ -577,7 +577,22 @@ function getChartExportData(chartKey, title) {
   }
 }
 
-/** PNG – bílé pozadí (canvas je průhledný). */
+/** Pomocná funkce – spustí download přes dočasný <a> v DOM. */
+function triggerDownload(href, filename) {
+  const link = document.createElement("a");
+  link.href     = href;
+  link.download = filename;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  // Malá prodleva před odstraněním, aby stihlo spustit stahování
+  setTimeout(() => {
+    document.body.removeChild(link);
+    if (href.startsWith("blob:")) URL.revokeObjectURL(href);
+  }, 200);
+}
+
+/** PNG – bílé pozadí (canvas je standardně průhledný). */
 function doDownloadPNG(chartKey, filenameBase) {
   const src = state.charts[chartKey].canvas;
   const exp = document.createElement("canvas");
@@ -587,11 +602,7 @@ function doDownloadPNG(chartKey, filenameBase) {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, exp.width, exp.height);
   ctx.drawImage(src, 0, 0);
-
-  const link = document.createElement("a");
-  link.download = `${filenameBase}.png`;
-  link.href = exp.toDataURL("image/png");
-  link.click();
+  triggerDownload(exp.toDataURL("image/png"), `${filenameBase}.png`);
 }
 
 /** CSV – středník jako oddělovač, čárka jako desetinný oddělovač (cs-CZ). */
@@ -604,12 +615,7 @@ function doDownloadCSV(filenameBase, headers, rows, metaLines) {
 
   // BOM pro správné otevření UTF-8 v Excelu
   const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const url  = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.download = `${filenameBase}.csv`;
-  link.href = url;
-  link.click();
-  URL.revokeObjectURL(url);
+  triggerDownload(URL.createObjectURL(blob), `${filenameBase}.csv`);
 }
 
 /** XLSX – používá SheetJS (načtený z CDN). */
@@ -625,7 +631,6 @@ function doDownloadXLSX(filenameBase, headers, rows, metaLines) {
   for (const row of rows) wsData.push(row.map(v => v === null ? "" : v));
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
-  // Šíře sloupců: datum užší, ostatní širší
   ws["!cols"] = headers.map((_, i) => ({ wch: i === 0 ? 10 : 28 }));
 
   const wb = XLSX.utils.book_new();

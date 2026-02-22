@@ -501,6 +501,138 @@ function setParamValues(params) {
   });
 }
 
+// ── Export / stažení grafů ─────────────────────────────────────────────────
+
+const CHART_META = {
+  main: { base: "cnb-taylor-repo-sazba", title: "Repo sazba ČNB vs. Taylorovo pravidlo" },
+  cpi:  { base: "cnb-taylor-inflace",    title: "CPI inflace a inflační cíl ČNB" },
+  gdp:  { base: "cnb-taylor-hdp",        title: "Reálný růst HDP" },
+};
+
+function downloadChart(chartKey, format) {
+  if (!state.raw) return;
+  const meta = CHART_META[chartKey];
+  if (!meta) return;
+
+  if (format === "png") {
+    doDownloadPNG(chartKey, meta.base);
+    return;
+  }
+
+  const { headers, rows, metaLines } = getChartExportData(chartKey, meta.title);
+  if (format === "csv")  doDownloadCSV(meta.base,  headers, rows, metaLines);
+  if (format === "xlsx") doDownloadXLSX(meta.base, headers, rows, metaLines);
+}
+
+/** Vrátí aktuálně zobrazená data grafu včetně metadat pro export. */
+function getChartExportData(chartKey, title) {
+  const { from, to } = getDateRange();
+  const params = getParamValues();
+  const genAt  = state.raw.generated_at
+    ? new Date(state.raw.generated_at).toLocaleDateString("cs-CZ")
+    : "";
+
+  const metaLines = [
+    [title],
+    [`Staženo: ${genAt}   Období: ${from} – ${to}`],
+    ...(chartKey === "main"
+      ? [[`Parametry: ρ=${params.rho}  r*=${params.rstar}  α=${params.alpha}  β=${params.beta}`]]
+      : []),
+    [],   // prázdný oddělovač
+  ];
+
+  switch (chartKey) {
+    case "main": {
+      const allImplied = calculateTaylor(
+        state.raw, params.rho, params.rstar, params.alpha, params.beta
+      );
+      const actualF  = filterRaw(state.raw.dates, state.raw.actual_rate, from, to);
+      const impliedF = filterRaw(state.raw.dates, allImplied,            from, to);
+      const pistarF  = filterRaw(state.raw.dates, state.raw.pistar,      from, to);
+      return {
+        headers: ["Datum", "Skutečná repo sazba (%)", "Taylorova implikovaná sazba (%)", "Inflační cíl ČNB (%)"],
+        rows: actualF.dates.map((d, i) => [d, actualF.values[i], impliedF.values[i], pistarF.values[i]]),
+        metaLines,
+      };
+    }
+    case "cpi": {
+      const cpiF    = filterRaw(state.raw.dates, state.raw.cpi,    from, to);
+      const pistarF = filterRaw(state.raw.dates, state.raw.pistar, from, to);
+      return {
+        headers: ["Datum", "HICP inflace (%)", "Inflační cíl ČNB (%)"],
+        rows: cpiF.dates.map((d, i) => [d, cpiF.values[i], pistarF.values[i]]),
+        metaLines,
+      };
+    }
+    case "gdp": {
+      const gdpF = filterRaw(state.raw.dates, state.raw.gdp, from, to);
+      return {
+        headers: ["Datum", "Reálný růst HDP (%)"],
+        rows: gdpF.dates.map((d, i) => [d, gdpF.values[i]]),
+        metaLines,
+      };
+    }
+    default:
+      return { headers: [], rows: [], metaLines: [] };
+  }
+}
+
+/** PNG – bílé pozadí (canvas je průhledný). */
+function doDownloadPNG(chartKey, filenameBase) {
+  const src = state.charts[chartKey].canvas;
+  const exp = document.createElement("canvas");
+  exp.width  = src.width;
+  exp.height = src.height;
+  const ctx = exp.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, exp.width, exp.height);
+  ctx.drawImage(src, 0, 0);
+
+  const link = document.createElement("a");
+  link.download = `${filenameBase}.png`;
+  link.href = exp.toDataURL("image/png");
+  link.click();
+}
+
+/** CSV – středník jako oddělovač, čárka jako desetinný oddělovač (cs-CZ). */
+function doDownloadCSV(filenameBase, headers, rows, metaLines) {
+  const fmt = v => (v === null || v === undefined) ? "" : String(v).replace(".", ",");
+  const lines = [];
+  for (const m of metaLines) lines.push(m.map(String).join(";"));
+  lines.push(headers.join(";"));
+  for (const row of rows) lines.push(row.map(fmt).join(";"));
+
+  // BOM pro správné otevření UTF-8 v Excelu
+  const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const url  = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.download = `${filenameBase}.csv`;
+  link.href = url;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/** XLSX – používá SheetJS (načtený z CDN). */
+function doDownloadXLSX(filenameBase, headers, rows, metaLines) {
+  if (typeof XLSX === "undefined") {
+    alert("Knihovna XLSX není dostupná. Zkuste CSV.");
+    return;
+  }
+
+  const wsData = [];
+  for (const m of metaLines) wsData.push(m);
+  wsData.push(headers);
+  for (const row of rows) wsData.push(row.map(v => v === null ? "" : v));
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  // Šíře sloupců: datum užší, ostatní širší
+  ws["!cols"] = headers.map((_, i) => ({ wch: i === 0 ? 10 : 28 }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Data");
+  XLSX.writeFile(wb, `${filenameBase}.xlsx`);
+}
+
 // ── Loader ─────────────────────────────────────────────────────────────────
 function showLoader(visible, msg) {
   const el = $("loader");

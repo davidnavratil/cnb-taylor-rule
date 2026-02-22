@@ -6,6 +6,7 @@
   <title>Taylorovo pravidlo pro ČNB</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -141,7 +142,14 @@
 
     <!-- Hlavní graf: repo sazba -->
     <div class="chart-card chart-main">
-      <h3>Repo sazba ČNB vs. Taylorovo pravidlo</h3>
+      <div class="chart-header">
+        <h3>Repo sazba ČNB vs. Taylorovo pravidlo</h3>
+        <div class="chart-actions">
+          <button class="btn-dl" onclick="downloadChart('main','png')">⬇ PNG</button>
+          <button class="btn-dl" onclick="downloadChart('main','csv')">⬇ CSV</button>
+          <button class="btn-dl" onclick="downloadChart('main','xlsx')">⬇ XLSX</button>
+        </div>
+      </div>
       <div class="chart-wrap">
         <canvas id="main-chart"></canvas>
       </div>
@@ -150,13 +158,27 @@
     <!-- Vedlejší grafy -->
     <div class="charts-secondary">
       <div class="chart-card">
-        <h3>CPI inflace a inflační cíl ČNB <span class="chart-unit">(meziroční %, HICP)</span></h3>
+        <div class="chart-header">
+          <h3>CPI inflace a inflační cíl ČNB <span class="chart-unit">(meziroční %, HICP)</span></h3>
+          <div class="chart-actions">
+            <button class="btn-dl" onclick="downloadChart('cpi','png')">⬇ PNG</button>
+            <button class="btn-dl" onclick="downloadChart('cpi','csv')">⬇ CSV</button>
+            <button class="btn-dl" onclick="downloadChart('cpi','xlsx')">⬇ XLSX</button>
+          </div>
+        </div>
         <div class="chart-wrap chart-wrap-sm">
           <canvas id="cpi-chart"></canvas>
         </div>
       </div>
       <div class="chart-card">
-        <h3>Reálný růst HDP <span class="chart-unit">(meziroční %, sezonně očištěno)</span></h3>
+        <div class="chart-header">
+          <h3>Reálný růst HDP <span class="chart-unit">(meziroční %, sezonně očištěno)</span></h3>
+          <div class="chart-actions">
+            <button class="btn-dl" onclick="downloadChart('gdp','png')">⬇ PNG</button>
+            <button class="btn-dl" onclick="downloadChart('gdp','csv')">⬇ CSV</button>
+            <button class="btn-dl" onclick="downloadChart('gdp','xlsx')">⬇ XLSX</button>
+          </div>
+        </div>
         <div class="chart-wrap chart-wrap-sm">
           <canvas id="gdp-chart"></canvas>
         </div>

@@ -182,6 +182,16 @@ const lastValuePlugin = {
     const yScale = scales.y;
     if (!yScale || !chartArea) return;
 
+    // exportScale je nastaveno v doDownloadPNG → poutky se proporcionálně zvětší
+    const sf      = chart.config.options.exportScale ?? 1;
+    const FONT_SZ = Math.round(10 * sf);
+    const PAD_X   = Math.round(5  * sf);
+    const PAD_Y   = Math.round(2  * sf);
+    const PILL_H  = Math.round(14 * sf) + PAD_Y * 2;
+    const MIN_GAP = Math.round(20 * sf);
+    const RADIUS  = Math.round(3  * sf);
+    const x0      = chartArea.right + Math.round(4 * sf);
+
     // Sbírat labely ze všech viditelných datasetů s příznakem lastValueLabel
     const toRender = [];
     chart.data.datasets.forEach((dataset, di) => {
@@ -213,7 +223,6 @@ const lastValuePlugin = {
 
     // Seřadit shora dolů, pak rozlišit překrytí
     toRender.sort((a, b) => a.yPx - b.yPx);
-    const MIN_GAP = 20;
     for (let i = 1; i < toRender.length; i++) {
       if (toRender[i].yPx - toRender[i - 1].yPx < MIN_GAP) {
         toRender[i].yPx = toRender[i - 1].yPx + MIN_GAP;
@@ -221,27 +230,25 @@ const lastValuePlugin = {
     }
     // Clamp – nepřetéct přes dolní okraj
     for (let i = toRender.length - 1; i >= 0; i--) {
-      if (toRender[i].yPx > chartArea.bottom - 9) {
-        toRender[i].yPx = chartArea.bottom - 9;
+      if (toRender[i].yPx > chartArea.bottom - PILL_H / 2) {
+        toRender[i].yPx = chartArea.bottom - PILL_H / 2;
         if (i > 0) toRender[i - 1].yPx = Math.min(toRender[i - 1].yPx, toRender[i].yPx - MIN_GAP);
       }
     }
 
     // Kreslit poutky
-    const PAD_X = 5, PAD_Y = 2;
-    const x0    = chartArea.right + 4;
     ctx.save();
-    ctx.font         = "bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.font         = `bold ${FONT_SZ}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
     ctx.textAlign    = "left";
     ctx.textBaseline = "middle";
 
     toRender.forEach(({ yPx, color, text }) => {
       const tw = ctx.measureText(text).width;
       const bw = tw + PAD_X * 2;
-      const bh = 14 + PAD_Y * 2;
+      const bh = PILL_H;
       const bx = x0;
       const by = yPx - bh / 2;
-      const r  = 3;
+      const r  = RADIUS;
 
       // Zaoblený obdélník (ručně, kompatibilita se staršími Safari)
       ctx.fillStyle = color;
@@ -684,18 +691,19 @@ function triggerDownload(href, filename) {
 }
 
 /** PNG – bílé pozadí, název grafu nahoře, pevný formát 16:9 (1920×1080 px).
- *  Zdrojový canvas se škáluje s zachováním poměru stran (letterbox),
- *  aby nedocházelo ke zkreslenému textu či squished vykreslení. */
+ *  Graf se překreslí v plném rozlišení se škálovanými fonty a poutkami –
+ *  žádné letterboxing mezery, žádné zkreslení textu. */
 function doDownloadPNG(chartKey, filenameBase) {
-  const src     = state.charts[chartKey].canvas;
   const W       = 1920;
   const H       = 1080;   // 16:9
   const TITLE_H = 60;     // výška pruhu s názvem
+  const CHART_H = H - TITLE_H;
 
+  // Exportní canvas (titulek + plocha grafu)
   const exp = document.createElement("canvas");
   exp.width  = W;
   exp.height = H;
-  const ctx = exp.getContext("2d");
+  const ctx  = exp.getContext("2d");
 
   // Bílé pozadí
   ctx.fillStyle = "#ffffff";
@@ -703,7 +711,7 @@ function doDownloadPNG(chartKey, filenameBase) {
 
   // Název grafu
   const title = CHART_META[chartKey]?.title ?? "";
-  ctx.font         = "bold 22px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.font         = "bold 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   ctx.fillStyle    = "#212121";
   ctx.textAlign    = "center";
   ctx.textBaseline = "middle";
@@ -717,18 +725,79 @@ function doDownloadPNG(chartKey, filenameBase) {
   ctx.lineTo(W - 20, TITLE_H - 1);
   ctx.stroke();
 
-  // Obsah grafu – zachování poměru stran (letterbox, centrováno)
-  const areaW = W;
-  const areaH = H - TITLE_H;
-  const srcW  = src.width;
-  const srcH  = src.height;
-  const scale = Math.min(areaW / srcW, areaH / srcH);
-  const dw    = Math.round(srcW * scale);
-  const dh    = Math.round(srcH * scale);
-  const dx    = Math.round((areaW - dw) / 2);
-  const dy    = TITLE_H + Math.round((areaH - dh) / 2);
+  // ── Překreslení grafu v plném rozlišení ────────────────────────────────
+  const tmpCanvas  = document.createElement("canvas");
+  tmpCanvas.width  = W;
+  tmpCanvas.height = CHART_H;
 
-  ctx.drawImage(src, dx, dy, dw, dh);
+  const srcChart = state.charts[chartKey];
+  // Referenční šířka 960 px → SF ≈ 2 při exportu 1920 px
+  const SF = W / 960;
+
+  // Klonování dat ze zdrojového grafu (bez sdílených referencí)
+  const clonedData = {
+    labels: [...srcChart.data.labels],
+    datasets: srcChart.data.datasets.map(ds => ({
+      ...ds,
+      data: [...ds.data],
+      ...(Array.isArray(ds.backgroundColor) && {
+        backgroundColor: [...ds.backgroundColor],
+      }),
+    })),
+  };
+
+  // Škálované options – fonty, legendy, padding; exportScale předáno do lastValuePlugin
+  const srcOpts    = srcChart.config.options;
+  const exportOpts = {
+    ...srcOpts,
+    responsive:  false,
+    animation:   false,
+    exportScale: SF,
+    layout: { padding: { right: Math.round(62 * SF) } },
+    plugins: {
+      ...srcOpts.plugins,
+      legend: {
+        ...srcOpts.plugins?.legend,
+        labels: {
+          ...srcOpts.plugins?.legend?.labels,
+          boxWidth: Math.round(14 * SF),
+          font:     { size: Math.round(12 * SF) },
+          padding:  Math.round(12 * SF),
+        },
+      },
+      tooltip: { enabled: false },
+    },
+    scales: {
+      x: {
+        ...srcOpts.scales?.x,
+        ticks: {
+          ...srcOpts.scales?.x?.ticks,
+          font:         { size: Math.round(11 * SF) },
+          maxRotation:  0,
+        },
+        grid: { color: "rgba(0,0,0,.05)" },
+      },
+      y: {
+        ...srcOpts.scales?.y,
+        title: { display: true, text: "%", font: { size: Math.round(11 * SF) } },
+        ticks: {
+          ...srcOpts.scales?.y?.ticks,
+          font: { size: Math.round(11 * SF) },
+        },
+        grid: { color: "rgba(0,0,0,.05)" },
+      },
+    },
+  };
+
+  // Chart.js s animation:false kreslí synchronně → canvas je ihned připraven
+  const tmpChart = new Chart(tmpCanvas, {
+    type:    srcChart.config.type,
+    data:    clonedData,
+    options: exportOpts,
+  });
+
+  ctx.drawImage(tmpCanvas, 0, TITLE_H);
+  tmpChart.destroy();
 
   triggerDownload(exp.toDataURL("image/png"), `${filenameBase}.png`);
 }

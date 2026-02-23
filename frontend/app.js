@@ -173,6 +173,101 @@ function computeStats(actual, implied) {
   };
 }
 
+// ── Plugin: poutky s poslední hodnotou na pravém okraji ───────────────────
+
+const lastValuePlugin = {
+  id: "lastValueLabel",
+  afterDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    const yScale = scales.y;
+    if (!yScale || !chartArea) return;
+
+    // Sbírat labely ze všech viditelných datasetů s příznakem lastValueLabel
+    const toRender = [];
+    chart.data.datasets.forEach((dataset, di) => {
+      if (dataset.lastValueLabel === false) return;
+      if (!chart.isDatasetVisible(di)) return;
+
+      // Poslední nenulová hodnota v datasetu
+      const data = dataset.data;
+      let lastVal = null;
+      for (let i = data.length - 1; i >= 0; i--) {
+        const v = data[i];
+        if (v !== null && v !== undefined && !isNaN(v)) { lastVal = v; break; }
+      }
+      if (lastVal === null) return;
+
+      const yPx = yScale.getPixelForValue(lastVal);
+      if (yPx < chartArea.top || yPx > chartArea.bottom) return;
+
+      // Barva: line charty mají borderColor; bar chart → podle znaménka hodnoty
+      let color = dataset.borderColor;
+      if (!color || typeof color !== "string" || color === "rgba(0,0,0,0)") {
+        color = lastVal >= 0 ? "#2E7D32" : "#C62828";
+      }
+      toRender.push({ yPx, color, text: lastVal.toFixed(2) + " %" });
+    });
+
+    if (!toRender.length) return;
+
+    // Seřadit shora dolů, pak rozlišit překrytí
+    toRender.sort((a, b) => a.yPx - b.yPx);
+    const MIN_GAP = 20;
+    for (let i = 1; i < toRender.length; i++) {
+      if (toRender[i].yPx - toRender[i - 1].yPx < MIN_GAP) {
+        toRender[i].yPx = toRender[i - 1].yPx + MIN_GAP;
+      }
+    }
+    // Clamp – nepřetéct přes dolní okraj
+    for (let i = toRender.length - 1; i >= 0; i--) {
+      if (toRender[i].yPx > chartArea.bottom - 9) {
+        toRender[i].yPx = chartArea.bottom - 9;
+        if (i > 0) toRender[i - 1].yPx = Math.min(toRender[i - 1].yPx, toRender[i].yPx - MIN_GAP);
+      }
+    }
+
+    // Kreslit poutky
+    const PAD_X = 5, PAD_Y = 2;
+    const x0    = chartArea.right + 4;
+    ctx.save();
+    ctx.font         = "bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.textAlign    = "left";
+    ctx.textBaseline = "middle";
+
+    toRender.forEach(({ yPx, color, text }) => {
+      const tw = ctx.measureText(text).width;
+      const bw = tw + PAD_X * 2;
+      const bh = 14 + PAD_Y * 2;
+      const bx = x0;
+      const by = yPx - bh / 2;
+      const r  = 3;
+
+      // Zaoblený obdélník (ručně, kompatibilita se staršími Safari)
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(bx + r, by);
+      ctx.lineTo(bx + bw - r, by);
+      ctx.quadraticCurveTo(bx + bw, by,      bx + bw, by + r);
+      ctx.lineTo(bx + bw, by + bh - r);
+      ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - r, by + bh);
+      ctx.lineTo(bx + r, by + bh);
+      ctx.quadraticCurveTo(bx, by + bh,      bx, by + bh - r);
+      ctx.lineTo(bx, by + r);
+      ctx.quadraticCurveTo(bx, by,            bx + r, by);
+      ctx.closePath();
+      ctx.fill();
+
+      // Bílý text
+      ctx.fillStyle = "#fff";
+      ctx.fillText(text, bx + PAD_X, yPx);
+    });
+
+    ctx.restore();
+  },
+};
+
+Chart.register(lastValuePlugin);
+
 // ── Grafy ─────────────────────────────────────────────────────────────────
 
 const CHART_DEFAULTS = {
@@ -180,6 +275,7 @@ const CHART_DEFAULTS = {
   maintainAspectRatio: false,
   animation: { duration: 150 },
   interaction: { mode: "index", intersect: false },
+  layout: { padding: { right: 62 } },
   plugins: {
     legend: {
       position: "top",
@@ -230,6 +326,7 @@ function initCharts() {
           pointRadius: 0,
           pointHoverRadius: 4,
           tension: 0,
+          lastValueLabel: true,
           data: [],
           fill: false,
         },
@@ -241,6 +338,7 @@ function initCharts() {
           pointRadius: 0,
           pointHoverRadius: 4,
           tension: 0,
+          lastValueLabel: true,
           data: [],
           fill: false,
         },
@@ -251,6 +349,7 @@ function initCharts() {
           borderWidth: 1.2,
           pointRadius: 0,
           tension: 0,
+          lastValueLabel: false,
           data: [],
           fill: false,
         },
@@ -281,6 +380,7 @@ function initCharts() {
           borderWidth: 1.8,
           pointRadius: 0,
           tension: 0,
+          lastValueLabel: true,
           data: cpiFiltered.values,
         },
         {
@@ -290,6 +390,7 @@ function initCharts() {
           borderWidth: 1.2,
           pointRadius: 0,
           tension: 0,
+          lastValueLabel: false,
           data: pistarFiltered.values,
         },
       ],
@@ -325,6 +426,7 @@ function initCharts() {
             v === null ? "rgba(200,200,200,.4)" : v >= 0 ? "rgba(46,125,50,.65)" : "rgba(198,40,40,.65)"
           ),
           borderWidth: 0,
+          lastValueLabel: true,
           data: gdpFiltered.values,
         },
       ],

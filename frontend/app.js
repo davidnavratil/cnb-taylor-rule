@@ -683,12 +683,14 @@ function triggerDownload(href, filename) {
   }, 200);
 }
 
-/** PNG – bílé pozadí, název grafu nahoře, pevný formát 4:3 (1200×900 px). */
+/** PNG – bílé pozadí, název grafu nahoře, pevný formát 16:9 (1920×1080 px).
+ *  Zdrojový canvas se škáluje s zachováním poměru stran (letterbox),
+ *  aby nedocházelo ke zkreslenému textu či squished vykreslení. */
 function doDownloadPNG(chartKey, filenameBase) {
   const src     = state.charts[chartKey].canvas;
-  const W       = 1200;
-  const H       = 900;   // 4:3
-  const TITLE_H = 50;    // výška pruhu s názvem
+  const W       = 1920;
+  const H       = 1080;   // 16:9
+  const TITLE_H = 60;     // výška pruhu s názvem
 
   const exp = document.createElement("canvas");
   exp.width  = W;
@@ -701,7 +703,7 @@ function doDownloadPNG(chartKey, filenameBase) {
 
   // Název grafu
   const title = CHART_META[chartKey]?.title ?? "";
-  ctx.font         = "bold 18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.font         = "bold 22px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   ctx.fillStyle    = "#212121";
   ctx.textAlign    = "center";
   ctx.textBaseline = "middle";
@@ -715,8 +717,18 @@ function doDownloadPNG(chartKey, filenameBase) {
   ctx.lineTo(W - 20, TITLE_H - 1);
   ctx.stroke();
 
-  // Obsah grafu – škálovaný do zbývající plochy
-  ctx.drawImage(src, 0, TITLE_H, W, H - TITLE_H);
+  // Obsah grafu – zachování poměru stran (letterbox, centrováno)
+  const areaW = W;
+  const areaH = H - TITLE_H;
+  const srcW  = src.width;
+  const srcH  = src.height;
+  const scale = Math.min(areaW / srcW, areaH / srcH);
+  const dw    = Math.round(srcW * scale);
+  const dh    = Math.round(srcH * scale);
+  const dx    = Math.round((areaW - dw) / 2);
+  const dy    = TITLE_H + Math.round((areaH - dh) / 2);
+
+  ctx.drawImage(src, dx, dy, dw, dh);
 
   triggerDownload(exp.toDataURL("image/png"), `${filenameBase}.png`);
 }

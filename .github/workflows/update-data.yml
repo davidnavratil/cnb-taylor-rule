@@ -26,8 +26,24 @@ jobs:
       - name: Instalace závislostí (čistá, bez cache)
         run: pip install --no-cache-dir -r requirements.txt
 
+      - name: Záložní data z gh-pages (při výpadku API)
+        continue-on-error: true
+        run: |
+          git fetch origin gh-pages
+          git show origin/gh-pages:data.json   > frontend/data.json   2>/dev/null || true
+          git show origin/gh-pages:params.json > frontend/params.json 2>/dev/null || true
+          echo "Záložní data obnovena ($(wc -c < frontend/data.json 2>/dev/null || echo 0) B)"
+
       - name: Generování dat (data.json + params.json)
+        continue-on-error: true
         run: python scripts/generate_data.py
+
+      - name: Ověření dat před nasazením
+        run: |
+          if [ ! -f frontend/data.json ]; then
+            echo "CHYBA: data.json neexistuje, nelze nasadit" && exit 1
+          fi
+          echo "OK: data.json $(wc -c < frontend/data.json) B"
 
       - name: Nasazení na GitHub Pages (gh-pages větev)
         uses: peaceiris/actions-gh-pages@v4

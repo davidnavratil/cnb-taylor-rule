@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,38 @@ from cache import get_cached, set_cached
 log = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
+
+# Eurostat vyžaduje User-Agent podobný prohlížeči, jinak může spojení odmítnout
+_EUROSTAT_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": (
+        "Mozilla/5.0 (compatible; cnb-taylor-rule/1.0; "
+        "+https://github.com/davidnavratil/cnb-taylor-rule)"
+    ),
+}
+
+
+def _get_with_retry(
+    client: httpx.Client,
+    url: str,
+    max_attempts: int = 3,
+    delay: int = 15,
+    **kwargs,
+) -> httpx.Response:
+    """HTTP GET s opakováním při selhání (max_attempts pokusů, delay s mezi nimi)."""
+    last_exc: Exception = RuntimeError("Žádný pokus nebyl proveden")
+    for attempt in range(1, max_attempts + 1):
+        try:
+            r = client.get(url, **kwargs)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            last_exc = e
+            if attempt < max_attempts:
+                log.warning(f"Pokus {attempt}/{max_attempts} selhal ({e}), čekám {delay}s…")
+                time.sleep(delay)
+    raise last_exc
+
 
 # --- Inflační cíl ČNB (hardcoded historické hodnoty) ---
 _PISTAR = [
@@ -130,8 +163,7 @@ def fetch_cpi(client: httpx.Client) -> pd.Series:
     )
     try:
         log.info("Stahování CPI z Eurostat...")
-        r = client.get(url, timeout=30, headers={"Accept": "application/json"})
-        r.raise_for_status()
+        r = _get_with_retry(client, url, timeout=45, headers=_EUROSTAT_HEADERS)
         s_idx = _parse_eurostat_jsonstat(r.json())
     except Exception as e:
         log.warning(f"Stahování CPI selhalo: {e}, zkouším fallback CSV")
@@ -181,8 +213,7 @@ def fetch_gdp(client: httpx.Client) -> pd.Series:
     )
     try:
         log.info("Stahování HDP z Eurostat...")
-        r = client.get(url, timeout=30, headers={"Accept": "application/json"})
-        r.raise_for_status()
+        r = _get_with_retry(client, url, timeout=45, headers=_EUROSTAT_HEADERS)
         s_idx = _parse_eurostat_jsonstat(r.json())
     except Exception as e:
         log.warning(f"Stahování HDP selhalo: {e}, zkouším fallback CSV")

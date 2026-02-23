@@ -342,17 +342,6 @@ function initCharts() {
           data: [],
           fill: false,
         },
-        {
-          label: "Inflační cíl ČNB",
-          borderColor: "#BDBDBD",
-          borderDash: [2, 4],
-          borderWidth: 1.2,
-          pointRadius: 0,
-          tension: 0,
-          lastValueLabel: false,
-          data: [],
-          fill: false,
-        },
       ],
     },
     options: {
@@ -467,14 +456,12 @@ function updateTaylorChart() {
   // Filtrovat pro zobrazení a statistiky
   const actualF  = filterRaw(state.raw.dates, state.raw.actual_rate, from, to);
   const impliedF = filterRaw(state.raw.dates, allImplied,            from, to);
-  const pistarF  = filterRaw(state.raw.dates, state.raw.pistar,      from, to);
 
   // Aktualizovat hlavní graf
   const chart = state.charts.main;
   chart.data.labels            = actualF.dates;
   chart.data.datasets[0].data  = actualF.values;
   chart.data.datasets[1].data  = impliedF.values;
-  chart.data.datasets[2].data  = pistarF.values;
   chart.update("none");
 
   // Statistiky z filtrovaného rozsahu
@@ -650,10 +637,9 @@ function getChartExportData(chartKey, title) {
       );
       const actualF  = filterRaw(state.raw.dates, state.raw.actual_rate, from, to);
       const impliedF = filterRaw(state.raw.dates, allImplied,            from, to);
-      const pistarF  = filterRaw(state.raw.dates, state.raw.pistar,      from, to);
       return {
-        headers: ["Datum", "Skutečná repo sazba (%)", "Taylorova implikovaná sazba (%)", "Inflační cíl ČNB (%)"],
-        rows: actualF.dates.map((d, i) => [d, actualF.values[i], impliedF.values[i], pistarF.values[i]]),
+        headers: ["Datum", "Skutečná repo sazba (%)", "Taylorova implikovaná sazba (%)"],
+        rows: actualF.dates.map((d, i) => [d, actualF.values[i], impliedF.values[i]]),
         metaLines,
       };
     }

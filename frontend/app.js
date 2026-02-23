@@ -205,7 +205,8 @@ const lastValuePlugin = {
       if (!color || typeof color !== "string" || color === "rgba(0,0,0,0)") {
         color = lastVal >= 0 ? "#2E7D32" : "#C62828";
       }
-      toRender.push({ yPx, color, text: lastVal.toFixed(2) + " %" });
+      const dec = dataset.lastValueDecimals ?? 2;
+      toRender.push({ yPx, color, text: lastVal.toFixed(dec) + " %" });
     });
 
     if (!toRender.length) return;
@@ -370,6 +371,7 @@ function initCharts() {
           pointRadius: 0,
           tension: 0,
           lastValueLabel: true,
+          lastValueDecimals: 1,
           data: cpiFiltered.values,
         },
         {
@@ -416,6 +418,7 @@ function initCharts() {
           ),
           borderWidth: 0,
           lastValueLabel: true,
+          lastValueDecimals: 1,
           data: gdpFiltered.values,
         },
       ],

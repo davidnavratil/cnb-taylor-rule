@@ -683,16 +683,41 @@ function triggerDownload(href, filename) {
   }, 200);
 }
 
-/** PNG – bílé pozadí (canvas je standardně průhledný). */
+/** PNG – bílé pozadí, název grafu nahoře, pevný formát 4:3 (1200×900 px). */
 function doDownloadPNG(chartKey, filenameBase) {
-  const src = state.charts[chartKey].canvas;
+  const src     = state.charts[chartKey].canvas;
+  const W       = 1200;
+  const H       = 900;   // 4:3
+  const TITLE_H = 50;    // výška pruhu s názvem
+
   const exp = document.createElement("canvas");
-  exp.width  = src.width;
-  exp.height = src.height;
+  exp.width  = W;
+  exp.height = H;
   const ctx = exp.getContext("2d");
+
+  // Bílé pozadí
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, exp.width, exp.height);
-  ctx.drawImage(src, 0, 0);
+  ctx.fillRect(0, 0, W, H);
+
+  // Název grafu
+  const title = CHART_META[chartKey]?.title ?? "";
+  ctx.font         = "bold 18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.fillStyle    = "#212121";
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(title, W / 2, TITLE_H / 2);
+
+  // Jemná oddělovací linka pod názvem
+  ctx.strokeStyle = "#E0E0E0";
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(20, TITLE_H - 1);
+  ctx.lineTo(W - 20, TITLE_H - 1);
+  ctx.stroke();
+
+  // Obsah grafu – škálovaný do zbývající plochy
+  ctx.drawImage(src, 0, TITLE_H, W, H - TITLE_H);
+
   triggerDownload(exp.toDataURL("image/png"), `${filenameBase}.png`);
 }
 

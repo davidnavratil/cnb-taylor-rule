@@ -746,20 +746,23 @@ function doDownloadPNG(chartKey, filenameBase) {
     })),
   };
 
-  // Škálované options – fonty, legendy, padding; exportScale předáno do lastValuePlugin
-  const srcOpts    = srcChart.config.options;
+  // Options stavíme od nuly – NE přes spread srcOpts.
+  // Spread živých Chart.js options kopíruje interní stav (computed min/max os, pixelové
+  // rozměry…), který způsobí, že se data vykreslí jen na malé části canvasu.
+  const isSecondary   = chartKey !== "main";
+  const maxTicksLimit = isSecondary ? 10 : 16;
+
   const exportOpts = {
-    ...srcOpts,
-    responsive:  false,
-    animation:   false,
-    exportScale: SF,
-    layout: { padding: { right: Math.round(62 * SF) } },
+    responsive:          false,
+    maintainAspectRatio: false,
+    animation:           false,
+    exportScale:         SF,
+    interaction:         { mode: "index", intersect: false },
+    layout:              { padding: { right: Math.round(62 * SF) } },
     plugins: {
-      ...srcOpts.plugins,
       legend: {
-        ...srcOpts.plugins?.legend,
+        position: "top",
         labels: {
-          ...srcOpts.plugins?.legend?.labels,
           boxWidth: Math.round(14 * SF),
           font:     { size: Math.round(12 * SF) },
           padding:  Math.round(12 * SF),
@@ -769,22 +772,17 @@ function doDownloadPNG(chartKey, filenameBase) {
     },
     scales: {
       x: {
-        ...srcOpts.scales?.x,
         ticks: {
-          ...srcOpts.scales?.x?.ticks,
-          font:         { size: Math.round(11 * SF) },
-          maxRotation:  0,
+          maxTicksLimit,
+          font:        { size: Math.round(11 * SF) },
+          maxRotation: 0,
         },
         grid: { color: "rgba(0,0,0,.05)" },
       },
       y: {
-        ...srcOpts.scales?.y,
         title: { display: true, text: "%", font: { size: Math.round(11 * SF) } },
-        ticks: {
-          ...srcOpts.scales?.y?.ticks,
-          font: { size: Math.round(11 * SF) },
-        },
-        grid: { color: "rgba(0,0,0,.05)" },
+        ticks: { font: { size: Math.round(11 * SF) } },
+        grid:  { color: "rgba(0,0,0,.05)" },
       },
     },
   };

@@ -1,0 +1,24 @@
+# Layer 1: Hard rules — never false-positive
+# Runs on every git commit. To activate locally: `pre-commit install` in repo root.
+# Docs: https://pre-commit.com
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=50000']   # block files > 50 MB (GitHub hard limit is 100 MB)
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+        exclude: ^\.github/workflows/  # GitHub Actions uses reserved YAML words like 'on:'
+      - id: check-toml
+      - id: detect-private-key       # catches BEGIN RSA/OPENSSH/EC/DSA PRIVATE KEY
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.0
+    hooks:
+      - id: gitleaks
+        # Scans diff for API keys, tokens, and 150+ known patterns.
+        # Tuning: create .gitleaksignore for legitimate fixtures.

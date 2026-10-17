@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Taylorovo pravidlo pro ČNB</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- ── Loader overlay ─────────────────────────────────────────────────────── -->
+<div id="loader" class="loader-overlay">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <p id="loader-msg">Načítám data z ČNB a Eurostat…</p>
+  </div>
+</div>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="header-left">
+    <div class="header-title">
+      <h1>Taylorovo pravidlo pro ČNB</h1>
+      <p class="subtitle">Simulace repo sazby ČNB pomocí inertního Taylorova pravidla</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-meta">
+      <span id="data-status" class="badge badge-loading">Načítám…</span>
+      <span id="obs-count" class="badge badge-info"></span>
+    </div>
+    <a href="https://davidnavratil.substack.com/" target="_blank" rel="noopener" class="substack-link">
+      Peníze, procenta a prosperita
+    </a>
+  </div>
+</header>
+
+<!-- ── Hlavní obsah ────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Levý panel: parametry a statistiky -->
+  <aside id="params-panel">
+
+    <section class="panel-section">
+      <h2>Parametry</h2>
+
+      <div class="param-group">
+        <div class="param-label">
+          <span class="param-name">ρ <span class="param-desc">(setrvačnost)</span></span>
+          <input type="number" id="rho-num" class="param-num" min="0" max="0.99" step="0.01" value="0.80" />
+        </div>
+        <input type="range" id="rho" class="slider" min="0" max="0.99" step="0.01" value="0.80" />
+        <div class="param-hint">Jak silně sleduje ČNB předchozí sazbu (0 = vůbec, 0.99 = téměř kopíruje)</div>
+      </div>
+
+      <div class="param-group">
+        <div class="param-label">
+          <span class="param-name">r* <span class="param-desc">(neutrální sazba, %)</span></span>
+          <input type="number" id="rstar-num" class="param-num" min="-2" max="5" step="0.1" value="1.5" />
+        </div>
+        <input type="range" id="rstar" class="slider" min="-2" max="5" step="0.1" value="1.5" />
+        <div class="param-hint">Reálná sazba v rovnováze (při nulové mezeře inflace a výstupu)</div>
+      </div>
+
+      <div class="param-group">
+        <div class="param-label">
+          <span class="param-name">α <span class="param-desc">(váha inflační mezery)</span></span>
+          <input type="number" id="alpha-num" class="param-num" min="0" max="3" step="0.1" value="1.5" />
+        </div>
+        <input type="range" id="alpha" class="slider" min="0" max="3" step="0.1" value="1.5" />
+        <div class="param-hint">Jak silně reaguje CB na odchylku inflace od cíle</div>
+      </div>
+
+      <div class="param-group">
+        <div class="param-label">
+          <span class="param-name">β <span class="param-desc">(váha růstu HDP)</span></span>
+          <input type="number" id="beta-num" class="param-num" min="0" max="3" step="0.1" value="0.5" />
+        </div>
+        <input type="range" id="beta" class="slider" min="0" max="3" step="0.1" value="0.5" />
+        <div class="param-hint">Jak silně reaguje CB na hospodářský cyklus</div>
+      </div>
+
+      <button id="reset-btn" class="btn-primary">↺ Výchozí (OLS odhad)</button>
+    </section>
+
+    <!-- Statistiky -->
+    <section class="panel-section" id="stats-section">
+      <h2>Statistiky shody</h2>
+      <p class="stats-subtitle">Skutečná vs. implikovaná sazba</p>
+      <table class="stats-table">
+        <tr>
+          <td>RMSE</td>
+          <td id="stat-rmse" class="stat-val">—</td>
+        </tr>
+        <tr>
+          <td>MAE</td>
+          <td id="stat-mae" class="stat-val">—</td>
+        </tr>
+        <tr>
+          <td>Korelace</td>
+          <td id="stat-corr" class="stat-val">—</td>
+        </tr>
+        <tr>
+          <td>Průměrná odchylka</td>
+          <td id="stat-dev" class="stat-val">—</td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- Vzorec -->
+    <section class="panel-section formula-section">
+      <h2>Vzorec</h2>
+      <div class="formula">
+        i<sub>t</sub> = ρ·i<sub>t−1</sub> + (1−ρ)·[r* + π<sub>t</sub> + α·(π<sub>t</sub>−π*<sub>t</sub>) + β·g<sub>t</sub>]
+      </div>
+      <ul class="formula-legend">
+        <li><strong>i<sub>t−1</sub></strong> = skutečná repo sazba minulý měsíc</li>
+        <li><strong>π<sub>t</sub></strong> = meziroční CPI inflace (HICP)</li>
+        <li><strong>π*<sub>t</sub></strong> = inflační cíl ČNB (2 % od 2010)</li>
+        <li><strong>g<sub>t</sub></strong> = meziroční růst reálného HDP</li>
+      </ul>
+    </section>
+  </aside>
+
+  <!-- Pravá část: grafy -->
+  <section id="charts-section">
+
+    <!-- Časový rozsah -->
+    <div class="date-range-bar">
+      <label>Zobrazit od:
+        <input type="month" id="date-from" min="2000-01" max="2026-01" value="2000-01" />
+      </label>
+      <label>do:
+        <input type="month" id="date-to" min="2000-01" max="2026-12" value="2025-12" />
+      </label>
+      <button id="zoom-5y" class="btn-secondary">Posledních 5 let</button>
+      <button id="zoom-10y" class="btn-secondary">10 let</button>
+      <button id="zoom-all" class="btn-secondary">Celé období</button>
+    </div>
+
+    <!-- Hlavní graf: repo sazba -->
+    <div class="chart-card chart-main">
+      <div class="chart-header">
+        <h3>Repo sazba ČNB vs. Taylorovo pravidlo</h3>
+        <div class="chart-actions">
+          <button class="btn-dl" onclick="downloadChart('main','png')">⬇ PNG</button>
+          <button class="btn-dl" onclick="downloadChart('main','csv')">⬇ CSV</button>
+          <button class="btn-dl" onclick="downloadChart('main','xlsx')">⬇ XLSX</button>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="main-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Vedlejší grafy -->
+    <div class="charts-secondary">
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3>CPI inflace a inflační cíl ČNB <span class="chart-unit">(meziroční %, HICP)</span></h3>
+          <div class="chart-actions">
+            <button class="btn-dl" onclick="downloadChart('cpi','png')">⬇ PNG</button>
+            <button class="btn-dl" onclick="downloadChart('cpi','csv')">⬇ CSV</button>
+            <button class="btn-dl" onclick="downloadChart('cpi','xlsx')">⬇ XLSX</button>
+          </div>
+        </div>
+        <div class="chart-wrap chart-wrap-sm">
+          <canvas id="cpi-chart"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3>Reálný růst HDP <span class="chart-unit">(meziroční %, sezonně očištěno)</span></h3>
+          <div class="chart-actions">
+            <button class="btn-dl" onclick="downloadChart('gdp','png')">⬇ PNG</button>
+            <button class="btn-dl" onclick="downloadChart('gdp','csv')">⬇ CSV</button>
+            <button class="btn-dl" onclick="downloadChart('gdp','xlsx')">⬇ XLSX</button>
+          </div>
+        </div>
+        <div class="chart-wrap chart-wrap-sm">
+          <canvas id="gdp-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
+<footer>
+  <p>
+    Data: <a href="https://www.cnb.cz" target="_blank">ČNB</a> (repo sazba) ·
+    <a href="https://ec.europa.eu/eurostat" target="_blank">Eurostat</a> (HICP, HDP) ·
+    Aplikace je pouze ilustrativní, neslouží jako finanční poradenství.
+  </p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
